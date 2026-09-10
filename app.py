@@ -37,8 +37,8 @@ logger = logging.getLogger("ndma_dashboard")
 DATA_PATH = Path("data/pakistan_districts.csv")
 MODEL_PATH = Path("models/best_hazard_pipeline.pkl")
 
-RISK_COLORS = {"Low": "#2E7D32", "Medium": "#F9A825", "High": "#C62828"}
-RISK_ICONS = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}
+RISK_BADGE_COLOR = {"Low": "green", "Medium": "orange", "High": "red"}
+RISK_ICONS = {"Low": ":material/check_circle:", "Medium": ":material/warning:", "High": ":material/report:"}
 
 TARGET_LABELS = {
     "flood_risk": "Flood Risk",
@@ -226,11 +226,14 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     """Render the Scenario Engine sidebar and return the (possibly
     user-modified) single-row feature DataFrame to run predictions on.
     """
-    st.sidebar.header("🎛️ Scenario Engine")
+    st.sidebar.header(":material/tune: Scenario Engine")
     st.sidebar.caption("Select a district, then simulate climate scenarios with the sliders below.")
     st.sidebar.divider()
 
-    st.sidebar.markdown('<div class="ndma-sidebar-section">📍 District Selection</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<span class="ndma-sidebar-section">:material/location_on: District Selection</span>',
+        unsafe_allow_html=True,
+    )
     district_names = sorted(df["district_name"].unique().tolist())
     default_idx = district_names.index("Karachi") if "Karachi" in district_names else 0
 
@@ -247,7 +250,10 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     st.sidebar.markdown(f"**Province:** {baseline_row['province']}")
     st.sidebar.markdown(f"**Soil Type:** {baseline_row['soil_type'].title()}")
     st.sidebar.divider()
-    st.sidebar.markdown('<div class="ndma-sidebar-section">🌡️ Adjustable Parameters</div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<span class="ndma-sidebar-section">:material/thermostat: Adjustable Parameters</span>',
+        unsafe_allow_html=True,
+    )
 
     scenario_values: dict[str, float] = {}
     for feature, cfg in SLIDER_CONFIG.items():
@@ -264,7 +270,7 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     st.sidebar.divider()
-    if st.sidebar.button("↺ Reset to District Baseline", width='stretch'):
+    if st.sidebar.button(":material/restart_alt: Reset to District Baseline", width='stretch'):
         for feature in SLIDER_CONFIG:
             st.session_state.pop(f"slider_{feature}_{selected_district}", None)
         st.rerun()
@@ -299,28 +305,17 @@ def render_command_center_css() -> None:
             background: linear-gradient(180deg, rgba(30, 41, 59, 0.045) 0%, rgba(30, 41, 59, 0.01) 100%);
             box-shadow: 0 4px 14px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.08);
         }
-        .ndma-card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 0.15rem;
-        }
         .ndma-card-title {
             font-size: 0.82rem;
             font-weight: 600;
             letter-spacing: 0.02em;
             opacity: 0.75;
             text-transform: uppercase;
-        }
-        .ndma-card-badge {
-            font-size: 0.72rem;
-            font-weight: 700;
-            padding: 0.15rem 0.55rem;
-            border-radius: 999px;
-            color: white;
-            white-space: nowrap;
+            padding-top: 0.25rem;
+            display: inline-block;
         }
         .ndma-card-confidence {
+            display: block;
             font-size: 0.78rem;
             opacity: 0.65;
             text-align: center;
@@ -328,6 +323,7 @@ def render_command_center_css() -> None:
             padding-bottom: 0.6rem;
         }
         .ndma-sidebar-section {
+            display: block;
             font-size: 0.95rem;
             font-weight: 700;
             letter-spacing: 0.01em;
@@ -409,21 +405,18 @@ def render_metrics(predictions: dict[str, dict[str, Any]]) -> None:
 
         with col:
             with st.container(border=True, key=f"hazard_card_{target}"):
-                st.markdown(
-                    f"""
-                    <div class="ndma-card-header">
-                        <span class="ndma-card-title">{TARGET_LABELS[target]}</span>
-                        <span class="ndma-card-badge" style="background-color:{RISK_COLORS[label]};">
-                            {RISK_ICONS[label]} {label}
-                        </span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                title_col, badge_col = st.columns([2, 1.3])
+                with title_col:
+                    st.markdown(
+                        f'<span class="ndma-card-title">{TARGET_LABELS[target]}</span>',
+                        unsafe_allow_html=True,
+                    )
+                with badge_col:
+                    st.badge(label, icon=RISK_ICONS[label], color=RISK_BADGE_COLOR[label])
                 fig = render_risk_gauge(target, label, risk_score_pct, confidence_pct)
                 st.plotly_chart(fig, width="stretch", key=f"gauge_{target}", config={"displayModeBar": False})
                 st.markdown(
-                    f'<div class="ndma-card-confidence">Model confidence: {confidence_pct:.1f}%</div>',
+                    f'<span class="ndma-card-confidence">Model confidence: {confidence_pct:.1f}%</span>',
                     unsafe_allow_html=True,
                 )
 
@@ -437,7 +430,7 @@ def render_map_and_radar(
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📍 District Location")
+        st.subheader(":material/location_on: District Location")
         map_df = pd.DataFrame(
             {"lat": [float(feature_row["latitude"].iloc[0])],
              "lon": [float(feature_row["longitude"].iloc[0])]}
@@ -446,7 +439,7 @@ def render_map_and_radar(
         st.caption(f"{district_name} — {feature_row['province'].iloc[0]}")
 
     with col2:
-        st.subheader("📊 Multi-Hazard Risk Profile")
+        st.subheader(":material/radar: Multi-Hazard Risk Profile")
         categories = [TARGET_LABELS[t] for t in ["flood_risk", "heatwave_risk", "seismic_risk"]]
         # Radar value = probability-weighted risk score (0-2 scale) so the
         # chart reflects model confidence, not just the arg-max class.
@@ -483,7 +476,7 @@ def render_shap_explanation(
     """Render the Explainable AI panel: a SHAP waterfall plot for whichever
     hazard has the highest predicted class (ties broken by confidence).
     """
-    st.subheader("🔍 Explainable AI — Why This Prediction?")
+    st.subheader(":material/policy: Decision Intelligence & Risk Drivers")
 
     highest_target = max(
         predictions,
@@ -491,6 +484,11 @@ def render_shap_explanation(
     )
     pred = predictions[highest_target]
 
+    st.markdown(
+        "This module provides a mathematical decomposition of the active prediction. "
+        "The chart below isolates the primary geophysical and climatic variables "
+        "driving the current risk assessment, allowing for transparent policy auditing."
+    )
     st.markdown(
         f"Highest predicted hazard: **{TARGET_LABELS[highest_target]} — {pred['label']}** "
         f"({pred['probs'][pred['class_idx']] * 100:.1f}% confidence). "
@@ -530,12 +528,12 @@ def render_shap_explanation(
 # --------------------------------------------------------------------------
 
 def main() -> None:
-    st.set_page_config(page_title="NDMA Risk AI", layout="wide", page_icon="🛡️")
+    st.set_page_config(page_title="NDMA Risk AI", layout="wide", page_icon=":material/security:")
 
-    st.title("🛡️ NDMA Pakistan — Multi-Hazard Risk Analyzer")
+    st.title(":material/security: National Disaster Intelligence Dashboard")
     st.caption(
-        "AI-powered flood, heatwave, and seismic risk assessment across "
-        "150+ Pakistani districts | Synthetic data, portfolio demonstration project"
+        "Predictive geospatial analytics and multi-hazard risk assessment "
+        "across 150+ provincial districts."
     )
 
     bundle = load_model_bundle(str(MODEL_PATH))
@@ -543,7 +541,7 @@ def main() -> None:
 
     if bundle is None or df is None:
         st.error(
-            "⚠️ **Model or data files not found.**\n\n"
+            ":material/error: **Model or data files not found.**\n\n"
             "This dashboard requires the trained model bundle and district "
             "dataset produced by the backend pipeline. Please run, in order:\n\n"
             "1. `python generate_data.py` — generates `data/pakistan_districts.csv`\n"
@@ -562,7 +560,7 @@ def main() -> None:
     model_features = bundle["numeric_features"] + bundle["categorical_features"]
     missing = [f for f in model_features if f not in feature_row.columns]
     if missing:
-        st.error(f"⚠️ Feature mismatch between dataset and trained model: missing {missing}")
+        st.error(f":material/error: Feature mismatch between dataset and trained model: missing {missing}")
         st.stop()
 
     try:
@@ -570,7 +568,7 @@ def main() -> None:
     except Exception:
         logger.exception("Prediction failed")
         st.error(
-            "⚠️ Prediction failed for the current scenario. This can happen "
+            ":material/error: Prediction failed for the current scenario. This can happen "
             "if a slider value falls outside the range the model was "
             "trained on. Try resetting to the district baseline."
         )
@@ -583,7 +581,7 @@ def main() -> None:
     st.divider()
     render_shap_explanation(bundle, feature_row[model_features], predictions)
 
-    with st.expander("📋 Full District Data Table"):
+    with st.expander(":material/table_chart: Full District Data Table"):
         st.dataframe(
             df[
                 ["district_name", "province", "flood_risk", "heatwave_risk",
@@ -599,11 +597,12 @@ def main() -> None:
 
     st.divider()
     st.caption(
-        "⚠️ Built on synthetic data for demonstration purposes. Model "
-        f"CV macro-F1: Flood={bundle['cv_macro_f1']['flood_risk']:.2f}, "
-        f"Heatwave={bundle['cv_macro_f1']['heatwave_risk']:.2f}, "
-        f"Seismic={bundle['cv_macro_f1']['seismic_risk']:.2f}. "
-        "Not for operational disaster response use."
+        "Data source: synthetic dataset constructed for methodology demonstration; "
+        "not derived from operational NDMA records. Model validation: "
+        f"CV macro-F1 — Flood {bundle['cv_macro_f1']['flood_risk']:.2f}, "
+        f"Heatwave {bundle['cv_macro_f1']['heatwave_risk']:.2f}, "
+        f"Seismic {bundle['cv_macro_f1']['seismic_risk']:.2f}. "
+        "Not certified for operational disaster response use."
     )
 
 
