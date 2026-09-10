@@ -196,7 +196,8 @@ The core engineering pattern — preprocessing pipeline → per-hazard tuned mod
 
 ## Author
 
-Built as part of an application for **Assistant Manager (AI/ML) — PPS-7, National Disaster Management Authority, Pakistan**.
+Developed by **Asad Amin** — AI/ML Engineer.
+*Specializing in predictive analytics, geospatial intelligence, and Explainable AI (XAI) for proactive disaster management.*
 
 ## License
 
