@@ -1,0 +1,18 @@
+# Pakistan Multi-Hazard Risk Analyzer — Backend/ML requirements
+# Tested and verified against this exact resolution (Sept 2026).
+numpy==2.4.4
+pandas==3.0.2
+scikit-learn==1.8.0
+xgboost==3.4.1
+catboost==1.2.10
+optuna==5.0.0
+shap==0.52.0
+joblib==1.5.3
+matplotlib==3.10.8
+seaborn==0.13.2
+
+# Added in the next phase (Streamlit frontend) — included now so
+# `pip install -r requirements.txt` is future-proof for deployment.
+streamlit>=1.38
+folium>=0.17
+streamlit-folium>=0.23
