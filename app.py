@@ -228,12 +228,14 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     """
     st.sidebar.header("🎛️ Scenario Engine")
     st.sidebar.caption("Select a district, then simulate climate scenarios with the sliders below.")
+    st.sidebar.divider()
 
+    st.sidebar.markdown('<div class="ndma-sidebar-section">📍 District Selection</div>', unsafe_allow_html=True)
     district_names = sorted(df["district_name"].unique().tolist())
     default_idx = district_names.index("Karachi") if "Karachi" in district_names else 0
 
     selected_district = st.sidebar.selectbox(
-        "Select District", district_names, index=default_idx, key="selected_district"
+        "Select District", district_names, index=default_idx, key="selected_district", label_visibility="collapsed"
     )
 
     if "last_district" not in st.session_state or st.session_state.last_district != selected_district:
@@ -245,7 +247,7 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     st.sidebar.markdown(f"**Province:** {baseline_row['province']}")
     st.sidebar.markdown(f"**Soil Type:** {baseline_row['soil_type'].title()}")
     st.sidebar.divider()
-    st.sidebar.subheader("Adjustable Parameters")
+    st.sidebar.markdown('<div class="ndma-sidebar-section">🌡️ Adjustable Parameters</div>', unsafe_allow_html=True)
 
     scenario_values: dict[str, float] = {}
     for feature, cfg in SLIDER_CONFIG.items():
@@ -261,6 +263,7 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
             help=f"Baseline for {selected_district}: {baseline_val:.1f}",
         )
 
+    st.sidebar.divider()
     if st.sidebar.button("↺ Reset to District Baseline", width='stretch'):
         for feature in SLIDER_CONFIG:
             st.session_state.pop(f"slider_{feature}_{selected_district}", None)
@@ -276,24 +279,153 @@ def render_sidebar(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame([feature_row]), selected_district, baseline_row
 
 
+def render_command_center_css() -> None:
+    """Inject scoped CSS for the elevated metric-card treatment.
+
+    Targets Streamlit's own keyed-container wrapper class
+    (`st-key-<key>`, stable public styling hook since Streamlit 1.3x) so
+    the border/shadow/radius apply to the REAL container that holds the
+    title, gauge, and confidence caption together — not a plain <div>
+    that only wraps the title while the gauge renders as a sibling
+    element outside it.
+    """
+    st.markdown(
+        """
+        <style>
+        div[class*="st-key-hazard_card_"] {
+            border-radius: 14px;
+            padding: 0.9rem 1.1rem 0.4rem 1.1rem;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            background: linear-gradient(180deg, rgba(30, 41, 59, 0.045) 0%, rgba(30, 41, 59, 0.01) 100%);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.08);
+        }
+        .ndma-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.15rem;
+        }
+        .ndma-card-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            opacity: 0.75;
+            text-transform: uppercase;
+        }
+        .ndma-card-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.15rem 0.55rem;
+            border-radius: 999px;
+            color: white;
+            white-space: nowrap;
+        }
+        .ndma-card-confidence {
+            font-size: 0.78rem;
+            opacity: 0.65;
+            text-align: center;
+            margin-top: -0.6rem;
+            padding-bottom: 0.6rem;
+        }
+        .ndma-sidebar-section {
+            font-size: 0.95rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            margin-top: 0.3rem;
+            margin-bottom: 0.2rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_risk_gauge(target: str, label: str, risk_score_pct: float, confidence_pct: float):
+    """Build a Plotly gauge indicator for one hazard.
+
+    The needle position is the model's weighted RISK SEVERITY (0-100,
+    derived from class probabilities — same measure driving the radar
+    chart), NOT the model's prediction confidence. Confidence is shown
+    as a separate caption underneath. Conflating the two on one
+    red/yellow/green gauge would visually imply "high confidence = high
+    danger," which is false and would misinform a non-technical viewer —
+    exactly the audience this dashboard exists to inform accurately.
+    """
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=risk_score_pct,
+            number={"suffix": "%", "font": {"size": 30}},
+            gauge={
+                "axis": {
+                    "range": [0, 100],
+                    "tickmode": "array",
+                    "tickvals": [0, 25, 50, 75, 100],
+                    "ticktext": ["0", "25", "50", "75", "100"],
+                    "tickwidth": 1,
+                    "tickcolor": "rgba(128,128,128,0.4)",
+                },
+                "bar": {"color": "#1e293b", "thickness": 0.28},
+                "bgcolor": "rgba(0,0,0,0)",
+                "borderwidth": 0,
+                "steps": [
+                    {"range": [0, 33], "color": "rgba(46, 125, 50, 0.55)"},
+                    {"range": [33, 66], "color": "rgba(249, 168, 37, 0.55)"},
+                    {"range": [66, 100], "color": "rgba(198, 40, 40, 0.55)"},
+                ],
+                "threshold": {
+                    "line": {"color": "#1e293b", "width": 3},
+                    "thickness": 0.85,
+                    "value": risk_score_pct,
+                },
+            },
+        )
+    )
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        height=210,
+        margin=dict(l=25, r=25, t=20, b=5),
+    )
+    return fig
+
+
 def render_metrics(predictions: dict[str, dict[str, Any]]) -> None:
-    """Render the top-row 3 color-coded st.metric() risk cards."""
+    """Render the top-row 3 hazard cards as elevated CSS containers, each
+    with a Plotly gauge showing weighted risk severity (0-100) and the
+    model's class-confidence shown separately beneath the gauge.
+    """
+    render_command_center_css()
     cols = st.columns(3)
     for col, target in zip(cols, ["flood_risk", "heatwave_risk", "seismic_risk"]):
         pred = predictions[target]
         label = pred["label"]
-        confidence = pred["probs"][pred["class_idx"]] * 100
+        confidence_pct = pred["probs"][pred["class_idx"]] * 100
+        # Weighted risk score on a 0-100 scale: same probability-weighted
+        # logic as the radar chart (sum of class_idx * prob), rescaled
+        # from the model's 0-2 class range to a 0-100 gauge range.
+        weighted_score = sum(i * p for i, p in enumerate(pred["probs"]))  # 0..2
+        risk_score_pct = (weighted_score / 2) * 100
+
         with col:
-            st.metric(
-                label=f"{RISK_ICONS[label]} {TARGET_LABELS[target]}",
-                value=label,
-                delta=f"{confidence:.1f}% confidence",
-                delta_color="off",
-            )
-            st.progress(
-                min(max(confidence / 100, 0.0), 1.0),
-                text=f"Model confidence: {confidence:.1f}%",
-            )
+            with st.container(border=True, key=f"hazard_card_{target}"):
+                st.markdown(
+                    f"""
+                    <div class="ndma-card-header">
+                        <span class="ndma-card-title">{TARGET_LABELS[target]}</span>
+                        <span class="ndma-card-badge" style="background-color:{RISK_COLORS[label]};">
+                            {RISK_ICONS[label]} {label}
+                        </span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                fig = render_risk_gauge(target, label, risk_score_pct, confidence_pct)
+                st.plotly_chart(fig, width="stretch", key=f"gauge_{target}", config={"displayModeBar": False})
+                st.markdown(
+                    f'<div class="ndma-card-confidence">Model confidence: {confidence_pct:.1f}%</div>',
+                    unsafe_allow_html=True,
+                )
 
 
 def render_map_and_radar(
